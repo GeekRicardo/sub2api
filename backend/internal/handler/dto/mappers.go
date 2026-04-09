@@ -641,6 +641,21 @@ func UsageLogFromServiceAdmin(l *service.UsageLog) *AdminUsageLog {
 	}
 }
 
+func UsageLogDetailFromServiceAdmin(l *service.UsageLog) *AdminUsageLogDetail {
+	if l == nil {
+		return nil
+	}
+	return &AdminUsageLogDetail{
+		AdminUsageLog:         *UsageLogFromServiceAdmin(l),
+		RequestBody:           l.RequestBody,
+		RequestBodyTruncated:  l.RequestBodyTruncated,
+		RequestBodyBytes:      l.RequestBodyBytes,
+		ResponseBody:          l.ResponseBody,
+		ResponseBodyTruncated: l.ResponseBodyTruncated,
+		ResponseBodyBytes:     l.ResponseBodyBytes,
+	}
+}
+
 func UsageCleanupTaskFromService(task *service.UsageCleanupTask) *UsageCleanupTask {
 	if task == nil {
 		return nil

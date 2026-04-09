@@ -16,8 +16,9 @@ import (
 var ErrOpsDisabled = infraerrors.NotFound("OPS_DISABLED", "Ops monitoring is disabled")
 
 const (
-	opsMaxStoredRequestBodyBytes = 256 * 1024
-	opsMaxStoredErrorBodyBytes   = 20 * 1024
+	opsMaxStoredRequestBodyBytes  = 256 * 1024
+	opsMaxStoredErrorBodyBytes    = 20 * 1024
+	opsMaxStoredResponseBodyBytes = 16 * 1024
 )
 
 // PrepareOpsRequestBodyForQueue 在入队前对请求体执行脱敏与裁剪，返回可直接写入 OpsInsertErrorLogInput 的字段。
@@ -34,6 +35,51 @@ func PrepareOpsRequestBodyForQueue(raw []byte) (requestBodyJSON *string, truncat
 	n := bytesLen
 	requestBodyBytes = &n
 	return requestBodyJSON, truncated, requestBodyBytes
+}
+
+// PrepareOpsResponseBodyForQueue trims a client-visible response body to a bounded
+// preview for request drill-down UIs. Unlike request bodies, responses are stored
+// as text previews and are not JSON-redacted because the payload is already visible
+// to the requesting client.
+func PrepareOpsResponseBodyForQueue(raw []byte) (responseBody *string, truncated bool, responseBodyBytes *int) {
+	if len(raw) == 0 {
+		return nil, false, nil
+	}
+	bytesLen := len(raw)
+	if bytesLen > opsMaxStoredResponseBodyBytes {
+		raw = raw[:opsMaxStoredResponseBodyBytes]
+		truncated = true
+	}
+	text := strings.TrimSpace(string(raw))
+	if text == "" {
+		responseBodyBytes = &bytesLen
+		return nil, truncated, responseBodyBytes
+	}
+	responseBody = &text
+	responseBodyBytes = &bytesLen
+	return responseBody, truncated, responseBodyBytes
+}
+
+// PrepareAdminUsageRequestBody stores an admin-visible raw request payload without redaction.
+// It keeps the full original content for admin drill-down.
+func PrepareAdminUsageRequestBody(raw []byte) (requestBody *string, truncated bool, requestBodyBytes *int) {
+	return prepareAdminUsageBody(raw)
+}
+
+// PrepareAdminUsageResponseBody stores an admin-visible raw response payload without redaction.
+func PrepareAdminUsageResponseBody(raw []byte) (responseBody *string, truncated bool, responseBodyBytes *int) {
+	return prepareAdminUsageBody(raw)
+}
+
+func prepareAdminUsageBody(raw []byte) (body *string, truncated bool, bodyBytes *int) {
+	if len(raw) == 0 {
+		return nil, false, nil
+	}
+	bytesLen := len(raw)
+	text := string(raw)
+	body = &text
+	bodyBytes = &bytesLen
+	return body, truncated, bodyBytes
 }
 
 // OpsService provides ingestion and query APIs for the Ops monitoring module.

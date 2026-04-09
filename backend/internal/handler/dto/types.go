@@ -448,6 +448,19 @@ type AdminUsageLog struct {
 	Account *AccountSummary `json:"account,omitempty"`
 }
 
+// AdminUsageLogDetail 是管理员查看单条使用记录详情时使用的 DTO。
+type AdminUsageLogDetail struct {
+	AdminUsageLog
+
+	RequestBody          *string `json:"request_body,omitempty"`
+	RequestBodyTruncated bool    `json:"request_body_truncated"`
+	RequestBodyBytes     *int    `json:"request_body_bytes,omitempty"`
+
+	ResponseBody          *string `json:"response_body,omitempty"`
+	ResponseBodyTruncated bool    `json:"response_body_truncated"`
+	ResponseBodyBytes     *int    `json:"response_body_bytes,omitempty"`
+}
+
 type UsageCleanupFilters struct {
 	StartTime   time.Time `json:"start_time"`
 	EndTime     time.Time `json:"end_time"`

@@ -87,6 +87,7 @@ func (r *opsRepository) ListRequestDetails(ctx context.Context, filter *service.
 	cte := `
 WITH combined AS (
   SELECT
+    ul.id AS detail_id,
     'success'::TEXT AS kind,
     ul.created_at AS created_at,
     ul.request_id AS request_id,
@@ -111,6 +112,7 @@ WITH combined AS (
   UNION ALL
 
   SELECT
+    o.id AS detail_id,
     'error'::TEXT AS kind,
     o.created_at AS created_at,
     COALESCE(NULLIF(o.request_id,''), NULLIF(o.client_request_id,''), '') AS request_id,
@@ -160,6 +162,7 @@ WITH combined AS (
 	listQuery := fmt.Sprintf(`
 %s
 SELECT
+  detail_id,
   kind,
   created_at,
   request_id,
@@ -207,6 +210,7 @@ LIMIT $%d OFFSET $%d
 	out := make([]*service.OpsRequestDetail, 0, pageSize)
 	for rows.Next() {
 		var (
+			detailID  int64
 			kind      string
 			createdAt time.Time
 			requestID sql.NullString
@@ -230,6 +234,7 @@ LIMIT $%d OFFSET $%d
 		)
 
 		if err := rows.Scan(
+			&detailID,
 			&kind,
 			&createdAt,
 			&requestID,
@@ -251,6 +256,7 @@ LIMIT $%d OFFSET $%d
 		}
 
 		item := &service.OpsRequestDetail{
+			DetailID:  detailID,
 			Kind:      service.OpsRequestKind(kind),
 			CreatedAt: createdAt,
 			RequestID: strings.TrimSpace(requestID.String),
@@ -283,4 +289,145 @@ LIMIT $%d OFFSET $%d
 	}
 
 	return out, total, nil
+}
+
+func (r *opsRepository) GetSuccessRequestDetail(ctx context.Context, id int64) (*service.OpsSuccessRequestDetail, error) {
+	if r == nil || r.db == nil {
+		return nil, fmt.Errorf("nil ops repository")
+	}
+
+	const q = `
+SELECT
+  ul.id,
+  ul.created_at,
+  COALESCE(ul.request_id, ''),
+  COALESCE(NULLIF(g.platform, ''), NULLIF(a.platform, ''), '') AS platform,
+  COALESCE(ul.model, ''),
+  COALESCE(ul.requested_model, ''),
+  COALESCE(ul.upstream_model, ''),
+  ul.duration_ms,
+  ul.stream,
+  ul.request_type,
+  ul.user_id,
+  COALESCE(u.email, ''),
+  ul.api_key_id,
+  ul.account_id,
+  COALESCE(a.name, ''),
+  ul.group_id,
+  COALESCE(g.name, ''),
+  COALESCE(ul.user_agent, ''),
+  COALESCE(ul.inbound_endpoint, ''),
+  COALESCE(ul.upstream_endpoint, ''),
+  COALESCE(ul.request_body, ''),
+  ul.request_body_truncated,
+  ul.request_body_bytes,
+  COALESCE(ul.response_body, ''),
+  ul.response_body_truncated,
+  ul.response_body_bytes,
+  ul.input_tokens,
+  ul.output_tokens,
+  ul.cache_creation_tokens,
+  ul.cache_read_tokens,
+  ul.total_cost,
+  ul.actual_cost
+FROM usage_logs ul
+LEFT JOIN users u ON u.id = ul.user_id
+LEFT JOIN accounts a ON a.id = ul.account_id
+LEFT JOIN groups g ON g.id = ul.group_id
+WHERE ul.id = $1
+LIMIT 1`
+
+	var (
+		out service.OpsSuccessRequestDetail
+
+		durationMs        sql.NullInt64
+		requestType       sql.NullInt64
+		userID            sql.NullInt64
+		apiKeyID          sql.NullInt64
+		accountID         sql.NullInt64
+		groupID           sql.NullInt64
+		requestBodyBytes  sql.NullInt64
+		responseBodyBytes sql.NullInt64
+	)
+
+	err := r.db.QueryRowContext(ctx, q, id).Scan(
+		&out.ID,
+		&out.CreatedAt,
+		&out.RequestID,
+		&out.Platform,
+		&out.Model,
+		&out.RequestedModel,
+		&out.UpstreamModel,
+		&durationMs,
+		&out.Stream,
+		&requestType,
+		&userID,
+		&out.UserEmail,
+		&apiKeyID,
+		&accountID,
+		&out.AccountName,
+		&groupID,
+		&out.GroupName,
+		&out.UserAgent,
+		&out.InboundEndpoint,
+		&out.UpstreamEndpoint,
+		&out.RequestBody,
+		&out.RequestBodyTruncated,
+		&requestBodyBytes,
+		&out.ResponseBody,
+		&out.ResponseBodyTruncated,
+		&responseBodyBytes,
+		&out.InputTokens,
+		&out.OutputTokens,
+		&out.CacheCreationTokens,
+		&out.CacheReadTokens,
+		&out.TotalCost,
+		&out.ActualCost,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if out.Platform == "" {
+		out.Platform = "unknown"
+	}
+	if out.RequestedModel == "" {
+		out.RequestedModel = out.Model
+	}
+	if durationMs.Valid {
+		value := int(durationMs.Int64)
+		out.DurationMs = &value
+	}
+	if requestType.Valid {
+		value := int16(requestType.Int64)
+		out.RequestType = &value
+	}
+	if userID.Valid {
+		value := userID.Int64
+		out.UserID = &value
+	}
+	if apiKeyID.Valid {
+		value := apiKeyID.Int64
+		out.APIKeyID = &value
+	}
+	if accountID.Valid {
+		value := accountID.Int64
+		out.AccountID = &value
+	}
+	if groupID.Valid {
+		value := groupID.Int64
+		out.GroupID = &value
+	}
+	if requestBodyBytes.Valid {
+		value := int(requestBodyBytes.Int64)
+		out.RequestBodyBytes = &value
+	}
+	if responseBodyBytes.Valid {
+		value := int(responseBodyBytes.Int64)
+		out.ResponseBodyBytes = &value
+	}
+
+	out.RequestBody = strings.TrimSpace(out.RequestBody)
+	out.ResponseBody = strings.TrimSpace(out.ResponseBody)
+	return &out, nil
 }

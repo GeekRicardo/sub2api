@@ -122,6 +122,18 @@ type UsageLog struct {
 	InboundEndpoint *string
 	// UpstreamEndpoint is the normalized upstream endpoint path, e.g. /v1/responses.
 	UpstreamEndpoint *string
+	// RequestBody stores a sanitized/truncated request preview for admin ops drill-down.
+	RequestBody *string
+	// RequestBodyTruncated indicates the request preview was truncated before persistence.
+	RequestBodyTruncated bool
+	// RequestBodyBytes stores the original request body size before truncation.
+	RequestBodyBytes *int
+	// ResponseBody stores a truncated client-visible response preview for admin ops drill-down.
+	ResponseBody *string
+	// ResponseBodyTruncated indicates the response preview was truncated before persistence.
+	ResponseBodyTruncated bool
+	// ResponseBodyBytes stores the original response body size before truncation.
+	ResponseBodyBytes *int
 
 	GroupID        *int64
 	SubscriptionID *int64

@@ -85,6 +85,15 @@ export interface AdminUsageQueryParams extends UsageQueryParams {
   sort_order?: 'asc' | 'desc'
 }
 
+export interface AdminUsageLogDetail extends AdminUsageLog {
+  request_body?: string | null
+  request_body_truncated: boolean
+  request_body_bytes?: number | null
+  response_body?: string | null
+  response_body_truncated: boolean
+  response_body_bytes?: number | null
+}
+
 // ==================== API Functions ====================
 
 /**
@@ -100,6 +109,11 @@ export async function list(
     params,
     signal: options?.signal
   })
+  return data
+}
+
+export async function getById(id: number): Promise<AdminUsageLogDetail> {
+  const { data } = await apiClient.get<AdminUsageLogDetail>(`/admin/usage/${id}`)
   return data
 }
 
@@ -198,6 +212,7 @@ export async function cancelCleanupTask(taskId: number): Promise<{ id: number; s
 
 export const adminUsageAPI = {
   list,
+  getById,
   getStats,
   searchUsers,
   searchApiKeys,

@@ -7847,19 +7847,25 @@ func (s *GatewayService) getUserGroupRateMultiplier(ctx context.Context, userID,
 
 // RecordUsageInput 记录使用量的输入参数
 type RecordUsageInput struct {
-	Result             *ForwardResult
-	ParsedRequest      *ParsedRequest
-	APIKey             *APIKey
-	User               *User
-	Account            *Account
-	Subscription       *UserSubscription  // 可选：订阅信息
-	InboundEndpoint    string             // 入站端点（客户端请求路径）
-	UpstreamEndpoint   string             // 上游端点（标准化后的上游路径）
-	UserAgent          string             // 请求的 User-Agent
-	IPAddress          string             // 请求的客户端 IP 地址
-	RequestPayloadHash string             // 请求体语义哈希，用于降低 request_id 误复用时的静默误去重风险
-	ForceCacheBilling  bool               // 强制缓存计费：将 input_tokens 转为 cache_read 计费（用于粘性会话切换）
-	APIKeyService      APIKeyQuotaUpdater // 可选：用于更新API Key配额
+	Result                *ForwardResult
+	ParsedRequest         *ParsedRequest
+	APIKey                *APIKey
+	User                  *User
+	Account               *Account
+	Subscription          *UserSubscription  // 可选：订阅信息
+	InboundEndpoint       string             // 入站端点（客户端请求路径）
+	UpstreamEndpoint      string             // 上游端点（标准化后的上游路径）
+	UserAgent             string             // 请求的 User-Agent
+	IPAddress             string             // 请求的客户端 IP 地址
+	RequestPayloadHash    string             // 请求体语义哈希，用于降低 request_id 误复用时的静默误去重风险
+	RequestBody           *string            // 脱敏/截断后的请求预览
+	RequestBodyTruncated  bool               // 请求预览是否被截断
+	RequestBodyBytes      *int               // 原始请求体字节数
+	ResponseBody          *string            // 截断后的客户端可见响应预览
+	ResponseBodyTruncated bool               // 响应预览是否被截断
+	ResponseBodyBytes     *int               // 原始响应体字节数
+	ForceCacheBilling     bool               // 强制缓存计费：将 input_tokens 转为 cache_read 计费（用于粘性会话切换）
+	APIKeyService         APIKeyQuotaUpdater // 可选：用于更新API Key配额
 
 	ChannelUsageFields // 渠道映射信息（由 handler 在 Forward 前解析）
 }
@@ -8259,19 +8265,25 @@ type recordUsageOpts struct {
 // RecordUsage 记录使用量并扣费（或更新订阅用量）
 func (s *GatewayService) RecordUsage(ctx context.Context, input *RecordUsageInput) error {
 	return s.recordUsageCore(ctx, &recordUsageCoreInput{
-		Result:             input.Result,
-		APIKey:             input.APIKey,
-		User:               input.User,
-		Account:            input.Account,
-		Subscription:       input.Subscription,
-		InboundEndpoint:    input.InboundEndpoint,
-		UpstreamEndpoint:   input.UpstreamEndpoint,
-		UserAgent:          input.UserAgent,
-		IPAddress:          input.IPAddress,
-		RequestPayloadHash: input.RequestPayloadHash,
-		ForceCacheBilling:  input.ForceCacheBilling,
-		APIKeyService:      input.APIKeyService,
-		ChannelUsageFields: input.ChannelUsageFields,
+		Result:                input.Result,
+		APIKey:                input.APIKey,
+		User:                  input.User,
+		Account:               input.Account,
+		Subscription:          input.Subscription,
+		InboundEndpoint:       input.InboundEndpoint,
+		UpstreamEndpoint:      input.UpstreamEndpoint,
+		UserAgent:             input.UserAgent,
+		IPAddress:             input.IPAddress,
+		RequestPayloadHash:    input.RequestPayloadHash,
+		RequestBody:           input.RequestBody,
+		RequestBodyTruncated:  input.RequestBodyTruncated,
+		RequestBodyBytes:      input.RequestBodyBytes,
+		ResponseBody:          input.ResponseBody,
+		ResponseBodyTruncated: input.ResponseBodyTruncated,
+		ResponseBodyBytes:     input.ResponseBodyBytes,
+		ForceCacheBilling:     input.ForceCacheBilling,
+		APIKeyService:         input.APIKeyService,
+		ChannelUsageFields:    input.ChannelUsageFields,
 	}, &recordUsageOpts{
 		EnableClaudePath: true,
 	})
@@ -8289,6 +8301,12 @@ type RecordUsageLongContextInput struct {
 	UserAgent             string             // 请求的 User-Agent
 	IPAddress             string             // 请求的客户端 IP 地址
 	RequestPayloadHash    string             // 请求体语义哈希，用于降低 request_id 误复用时的静默误去重风险
+	RequestBody           *string            // 脱敏/截断后的请求预览
+	RequestBodyTruncated  bool               // 请求预览是否被截断
+	RequestBodyBytes      *int               // 原始请求体字节数
+	ResponseBody          *string            // 截断后的客户端可见响应预览
+	ResponseBodyTruncated bool               // 响应预览是否被截断
+	ResponseBodyBytes     *int               // 原始响应体字节数
 	LongContextThreshold  int                // 长上下文阈值（如 200000）
 	LongContextMultiplier float64            // 超出阈值部分的倍率（如 2.0）
 	ForceCacheBilling     bool               // 强制缓存计费：将 input_tokens 转为 cache_read 计费（用于粘性会话切换）
@@ -8300,19 +8318,25 @@ type RecordUsageLongContextInput struct {
 // RecordUsageWithLongContext 记录使用量并扣费，支持长上下文双倍计费（用于 Gemini）
 func (s *GatewayService) RecordUsageWithLongContext(ctx context.Context, input *RecordUsageLongContextInput) error {
 	return s.recordUsageCore(ctx, &recordUsageCoreInput{
-		Result:             input.Result,
-		APIKey:             input.APIKey,
-		User:               input.User,
-		Account:            input.Account,
-		Subscription:       input.Subscription,
-		InboundEndpoint:    input.InboundEndpoint,
-		UpstreamEndpoint:   input.UpstreamEndpoint,
-		UserAgent:          input.UserAgent,
-		IPAddress:          input.IPAddress,
-		RequestPayloadHash: input.RequestPayloadHash,
-		ForceCacheBilling:  input.ForceCacheBilling,
-		APIKeyService:      input.APIKeyService,
-		ChannelUsageFields: input.ChannelUsageFields,
+		Result:                input.Result,
+		APIKey:                input.APIKey,
+		User:                  input.User,
+		Account:               input.Account,
+		Subscription:          input.Subscription,
+		InboundEndpoint:       input.InboundEndpoint,
+		UpstreamEndpoint:      input.UpstreamEndpoint,
+		UserAgent:             input.UserAgent,
+		IPAddress:             input.IPAddress,
+		RequestPayloadHash:    input.RequestPayloadHash,
+		RequestBody:           input.RequestBody,
+		RequestBodyTruncated:  input.RequestBodyTruncated,
+		RequestBodyBytes:      input.RequestBodyBytes,
+		ResponseBody:          input.ResponseBody,
+		ResponseBodyTruncated: input.ResponseBodyTruncated,
+		ResponseBodyBytes:     input.ResponseBodyBytes,
+		ForceCacheBilling:     input.ForceCacheBilling,
+		APIKeyService:         input.APIKeyService,
+		ChannelUsageFields:    input.ChannelUsageFields,
 	}, &recordUsageOpts{
 		LongContextThreshold:  input.LongContextThreshold,
 		LongContextMultiplier: input.LongContextMultiplier,
@@ -8321,18 +8345,24 @@ func (s *GatewayService) RecordUsageWithLongContext(ctx context.Context, input *
 
 // recordUsageCoreInput 是 recordUsageCore 的公共输入字段，从两种输入结构体中提取。
 type recordUsageCoreInput struct {
-	Result             *ForwardResult
-	APIKey             *APIKey
-	User               *User
-	Account            *Account
-	Subscription       *UserSubscription
-	InboundEndpoint    string
-	UpstreamEndpoint   string
-	UserAgent          string
-	IPAddress          string
-	RequestPayloadHash string
-	ForceCacheBilling  bool
-	APIKeyService      APIKeyQuotaUpdater
+	Result                *ForwardResult
+	APIKey                *APIKey
+	User                  *User
+	Account               *Account
+	Subscription          *UserSubscription
+	InboundEndpoint       string
+	UpstreamEndpoint      string
+	UserAgent             string
+	IPAddress             string
+	RequestPayloadHash    string
+	RequestBody           *string
+	RequestBodyTruncated  bool
+	RequestBodyBytes      *int
+	ResponseBody          *string
+	ResponseBodyTruncated bool
+	ResponseBodyBytes     *int
+	ForceCacheBilling     bool
+	APIKeyService         APIKeyQuotaUpdater
 	ChannelUsageFields
 }
 
@@ -8609,6 +8639,12 @@ func (s *GatewayService) buildRecordUsageLog(
 		ReasoningEffort:       result.ReasoningEffort,
 		InboundEndpoint:       optionalTrimmedStringPtr(input.InboundEndpoint),
 		UpstreamEndpoint:      optionalTrimmedStringPtr(input.UpstreamEndpoint),
+		RequestBody:           input.RequestBody,
+		RequestBodyTruncated:  input.RequestBodyTruncated,
+		RequestBodyBytes:      input.RequestBodyBytes,
+		ResponseBody:          input.ResponseBody,
+		ResponseBodyTruncated: input.ResponseBodyTruncated,
+		ResponseBodyBytes:     input.ResponseBodyBytes,
 		InputTokens:           result.Usage.InputTokens,
 		OutputTokens:          result.Usage.OutputTokens,
 		CacheCreationTokens:   result.Usage.CacheCreationInputTokens,

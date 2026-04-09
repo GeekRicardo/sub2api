@@ -503,6 +503,7 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 		// 捕获请求信息（用于异步记录，避免在 goroutine 中访问 gin.Context）
 		userAgent := c.GetHeader("User-Agent")
 		clientIP := ip.GetClientIP(c)
+		requestBody, requestBodyTruncated, requestBodyBytes, responseBody, responseBodyTruncated, responseBodyBytes := buildCapturedUsagePayload(body, c)
 
 		// 保存 Gemini 内容摘要会话（用于 Fallback 匹配）
 		if useDigestFallback && geminiDigestChain != "" && geminiPrefixHash != "" {
@@ -535,6 +536,12 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 				UserAgent:             userAgent,
 				IPAddress:             clientIP,
 				RequestPayloadHash:    requestPayloadHash,
+				RequestBody:           requestBody,
+				RequestBodyTruncated:  requestBodyTruncated,
+				RequestBodyBytes:      requestBodyBytes,
+				ResponseBody:          responseBody,
+				ResponseBodyTruncated: responseBodyTruncated,
+				ResponseBodyBytes:     responseBodyBytes,
 				LongContextThreshold:  200000, // Gemini 200K 阈值
 				LongContextMultiplier: 2.0,    // 超出部分双倍计费
 				ForceCacheBilling:     fs.ForceCacheBilling,

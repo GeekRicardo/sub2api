@@ -166,6 +166,7 @@ export type OpsRequestDetailsKind = OpsRequestKind | 'all'
 export type OpsRequestDetailsSort = 'created_at_desc' | 'duration_desc'
 
 export interface OpsRequestDetail {
+  detail_id: number
   kind: OpsRequestKind
   created_at: string
   request_id: string
@@ -186,6 +187,48 @@ export interface OpsRequestDetail {
   group_id?: number | null
 
   stream?: boolean
+}
+
+export interface OpsSuccessRequestDetail {
+  id: number
+  created_at: string
+  request_id: string
+
+  platform?: string
+  model?: string
+  requested_model?: string
+  upstream_model?: string
+
+  duration_ms?: number | null
+  stream?: boolean
+  request_type?: number | null
+
+  user_id?: number | null
+  user_email?: string
+  api_key_id?: number | null
+  account_id?: number | null
+  account_name?: string
+  group_id?: number | null
+  group_name?: string
+
+  user_agent?: string
+  inbound_endpoint?: string
+  upstream_endpoint?: string
+
+  request_body: string
+  request_body_truncated: boolean
+  request_body_bytes?: number | null
+
+  response_body: string
+  response_body_truncated: boolean
+  response_body_bytes?: number | null
+
+  input_tokens: number
+  output_tokens: number
+  cache_creation_tokens: number
+  cache_read_tokens: number
+  total_cost: number
+  actual_cost: number
 }
 
 export interface OpsRequestDetailsParams {
@@ -1230,6 +1273,11 @@ export async function listRequestDetails(params: OpsRequestDetailsParams): Promi
   return data
 }
 
+export async function getSuccessRequestDetail(id: number): Promise<OpsSuccessRequestDetail> {
+  const { data } = await apiClient.get<OpsSuccessRequestDetail>(`/admin/ops/requests/success/${id}`)
+  return data
+}
+
 // Alert rules
 export async function listAlertRules(): Promise<AlertRule[]> {
   const { data } = await apiClient.get<AlertRule[]>('/admin/ops/alert-rules')
@@ -1397,6 +1445,7 @@ export const opsAPI = {
   listRequestErrorUpstreamErrors,
 
   listRequestDetails,
+  getSuccessRequestDetail,
   listAlertRules,
   createAlertRule,
   updateAlertRule,

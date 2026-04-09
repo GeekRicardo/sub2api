@@ -8,14 +8,17 @@
         :server-side-sort="serverSideSort"
         :default-sort-key="defaultSortKey"
         :default-sort-order="defaultSortOrder"
+        row-key="id"
+        :row-clickable="true"
         @sort="(key, order) => $emit('sort', key, order)"
+        @rowClick="$emit('rowClick', $event)"
       >
         <template #cell-user="{ row }">
           <div class="text-sm">
             <button
               v-if="row.user?.email"
               class="font-medium text-primary-600 underline decoration-dashed underline-offset-2 transition-colors hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
-              @click="$emit('userClick', row.user_id, row.user?.email)"
+              @click.stop="$emit('userClick', row.user_id, row.user?.email)"
               :title="t('admin.usage.clickToViewBalance')"
             >
               {{ row.user.email }}
@@ -404,6 +407,7 @@ withDefaults(defineProps<Props>(), {
 })
 defineEmits<{
   userClick: [userID: number, email?: string]
+  rowClick: [row: AdminUsageLog]
   sort: [key: string, order: 'asc' | 'desc']
 }>()
 const { t } = useI18n()

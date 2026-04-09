@@ -80,6 +80,12 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			sqlmock.AnyArg(), // reasoning_effort
 			sqlmock.AnyArg(), // inbound_endpoint
 			sqlmock.AnyArg(), // upstream_endpoint
+			sqlmock.AnyArg(), // request_body
+			false,            // request_body_truncated
+			sqlmock.AnyArg(), // request_body_bytes
+			sqlmock.AnyArg(), // response_body
+			false,            // response_body_truncated
+			sqlmock.AnyArg(), // response_body_bytes
 			log.CacheTTLOverridden,
 			sqlmock.AnyArg(), // channel_id
 			sqlmock.AnyArg(), // model_mapping_chain
@@ -159,6 +165,12 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
+			sqlmock.AnyArg(), // request_body
+			false,            // request_body_truncated
+			sqlmock.AnyArg(), // request_body_bytes
+			sqlmock.AnyArg(), // response_body
+			false,            // response_body_truncated
+			sqlmock.AnyArg(), // response_body_bytes
 			log.CacheTTLOverridden,
 			sqlmock.AnyArg(), // channel_id
 			sqlmock.AnyArg(), // model_mapping_chain
@@ -571,6 +583,12 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},
 			sql.NullString{},
 			sql.NullString{},
+			sql.NullString{}, // request_body
+			false,
+			sql.NullInt64{},  // request_body_bytes
+			sql.NullString{}, // response_body
+			false,
+			sql.NullInt64{}, // response_body_bytes
 			false,
 			sql.NullInt64{},   // channel_id
 			sql.NullString{},  // model_mapping_chain
@@ -619,6 +637,12 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},
 			sql.NullString{},
 			sql.NullString{},
+			sql.NullString{},
+			false,
+			sql.NullInt64{},
+			sql.NullString{},
+			false,
+			sql.NullInt64{},
 			false,
 			sql.NullInt64{},   // channel_id
 			sql.NullString{},  // model_mapping_chain
@@ -667,6 +691,12 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},
 			sql.NullString{},
 			sql.NullString{},
+			sql.NullString{},
+			false,
+			sql.NullInt64{},
+			sql.NullString{},
+			false,
+			sql.NullInt64{},
 			false,
 			sql.NullInt64{},   // channel_id
 			sql.NullString{},  // model_mapping_chain

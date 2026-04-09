@@ -420,22 +420,29 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		requestPayloadHash := service.HashUsageRequestPayload(body)
 		inboundEndpoint := GetInboundEndpoint(c)
 		upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
+		requestBody, requestBodyTruncated, requestBodyBytes, responseBody, responseBodyTruncated, responseBodyBytes := buildCapturedUsagePayload(body, c)
 
 		// 使用量记录通过有界 worker 池提交，避免请求热路径创建无界 goroutine。
 		h.submitOpenAIUsageRecordTask(result, func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
-				Result:             result,
-				APIKey:             apiKey,
-				User:               apiKey.User,
-				Account:            account,
-				Subscription:       subscription,
-				InboundEndpoint:    inboundEndpoint,
-				UpstreamEndpoint:   upstreamEndpoint,
-				UserAgent:          userAgent,
-				IPAddress:          clientIP,
-				RequestPayloadHash: requestPayloadHash,
-				APIKeyService:      h.apiKeyService,
-				ChannelUsageFields: channelMapping.ToUsageFields(reqModel, result.UpstreamModel),
+				Result:                result,
+				APIKey:                apiKey,
+				User:                  apiKey.User,
+				Account:               account,
+				Subscription:          subscription,
+				InboundEndpoint:       inboundEndpoint,
+				UpstreamEndpoint:      upstreamEndpoint,
+				UserAgent:             userAgent,
+				IPAddress:             clientIP,
+				RequestPayloadHash:    requestPayloadHash,
+				RequestBody:           requestBody,
+				RequestBodyTruncated:  requestBodyTruncated,
+				RequestBodyBytes:      requestBodyBytes,
+				ResponseBody:          responseBody,
+				ResponseBodyTruncated: responseBodyTruncated,
+				ResponseBodyBytes:     responseBodyBytes,
+				APIKeyService:         h.apiKeyService,
+				ChannelUsageFields:    channelMapping.ToUsageFields(reqModel, result.UpstreamModel),
 			}); err != nil {
 				logger.L().With(
 					zap.String("component", "handler.openai_gateway.responses"),
@@ -795,21 +802,28 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		requestPayloadHash := service.HashUsageRequestPayload(body)
 		inboundEndpoint := GetInboundEndpoint(c)
 		upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
+		requestBody, requestBodyTruncated, requestBodyBytes, responseBody, responseBodyTruncated, responseBodyBytes := buildCapturedUsagePayload(body, c)
 
 		h.submitOpenAIUsageRecordTask(result, func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
-				Result:             result,
-				APIKey:             apiKey,
-				User:               apiKey.User,
-				Account:            account,
-				Subscription:       subscription,
-				InboundEndpoint:    inboundEndpoint,
-				UpstreamEndpoint:   upstreamEndpoint,
-				UserAgent:          userAgent,
-				IPAddress:          clientIP,
-				RequestPayloadHash: requestPayloadHash,
-				APIKeyService:      h.apiKeyService,
-				ChannelUsageFields: channelMappingMsg.ToUsageFields(reqModel, result.UpstreamModel),
+				Result:                result,
+				APIKey:                apiKey,
+				User:                  apiKey.User,
+				Account:               account,
+				Subscription:          subscription,
+				InboundEndpoint:       inboundEndpoint,
+				UpstreamEndpoint:      upstreamEndpoint,
+				UserAgent:             userAgent,
+				IPAddress:             clientIP,
+				RequestPayloadHash:    requestPayloadHash,
+				RequestBody:           requestBody,
+				RequestBodyTruncated:  requestBodyTruncated,
+				RequestBodyBytes:      requestBodyBytes,
+				ResponseBody:          responseBody,
+				ResponseBodyTruncated: responseBodyTruncated,
+				ResponseBodyBytes:     responseBodyBytes,
+				APIKeyService:         h.apiKeyService,
+				ChannelUsageFields:    channelMappingMsg.ToUsageFields(reqModel, result.UpstreamModel),
 			}); err != nil {
 				logger.L().With(
 					zap.String("component", "handler.openai_gateway.messages"),
@@ -1284,6 +1298,10 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		zap.String("schedule_layer", scheduleDecision.Layer),
 		zap.Int("candidate_count", scheduleDecision.CandidateCount),
 	)
+	wsInboundEndpoint := GetInboundEndpoint(c)
+	wsUpstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
+	wsRequestPayloadHash := service.HashUsageRequestPayload(firstMessage)
+	wsRequestBody, wsRequestBodyTruncated, wsRequestBodyBytes := service.PrepareOpsRequestBodyForQueue(firstMessage)
 
 	hooks := &service.OpenAIWSIngressHooks{
 		InitialRequestModel: reqModel,
@@ -1357,22 +1375,23 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				h.gatewayService.UpdateCodexUsageSnapshotFromHeaders(ctx, account.ID, result.ResponseHeaders)
 			}
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, true, result.FirstTokenMs)
-			inboundEndpoint := GetInboundEndpoint(c)
-			upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
 			h.submitOpenAIUsageRecordTask(result, func(taskCtx context.Context) {
 				if err := h.gatewayService.RecordUsage(taskCtx, &service.OpenAIRecordUsageInput{
-					Result:             result,
-					APIKey:             apiKey,
-					User:               apiKey.User,
-					Account:            account,
-					Subscription:       subscription,
-					InboundEndpoint:    inboundEndpoint,
-					UpstreamEndpoint:   upstreamEndpoint,
-					UserAgent:          userAgent,
-					IPAddress:          clientIP,
-					RequestPayloadHash: service.HashUsageRequestPayload(firstMessage),
-					APIKeyService:      h.apiKeyService,
-					ChannelUsageFields: channelMappingWS.ToUsageFields(reqModel, result.UpstreamModel),
+					Result:               result,
+					APIKey:               apiKey,
+					User:                 apiKey.User,
+					Account:              account,
+					Subscription:         subscription,
+					InboundEndpoint:      wsInboundEndpoint,
+					UpstreamEndpoint:     wsUpstreamEndpoint,
+					UserAgent:            userAgent,
+					IPAddress:            clientIP,
+					RequestPayloadHash:   wsRequestPayloadHash,
+					RequestBody:          wsRequestBody,
+					RequestBodyTruncated: wsRequestBodyTruncated,
+					RequestBodyBytes:     wsRequestBodyBytes,
+					APIKeyService:        h.apiKeyService,
+					ChannelUsageFields:   channelMappingWS.ToUsageFields(reqModel, result.UpstreamModel),
 				}); err != nil {
 					reqLog.Error("openai.websocket_record_usage_failed",
 						zap.Int64("account_id", account.ID),

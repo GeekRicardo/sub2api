@@ -2,7 +2,11 @@ package service
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"time"
+
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 )
 
 type OpsRequestKind string
@@ -15,6 +19,7 @@ const (
 // OpsRequestDetail is a request-level view across success (usage_logs) and error (ops_error_logs).
 // It powers "request drilldown" UIs without exposing full request bodies for successful requests.
 type OpsRequestDetail struct {
+	DetailID  int64          `json:"detail_id"`
 	Kind      OpsRequestKind `json:"kind"`
 	CreatedAt time.Time      `json:"created_at"`
 	RequestID string         `json:"request_id"`
@@ -38,6 +43,49 @@ type OpsRequestDetail struct {
 	GroupID   *int64 `json:"group_id,omitempty"`
 
 	Stream bool `json:"stream"`
+}
+
+type OpsSuccessRequestDetail struct {
+	ID        int64     `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	RequestID string    `json:"request_id"`
+
+	Platform       string `json:"platform,omitempty"`
+	Model          string `json:"model,omitempty"`
+	RequestedModel string `json:"requested_model,omitempty"`
+	UpstreamModel  string `json:"upstream_model,omitempty"`
+
+	DurationMs  *int   `json:"duration_ms,omitempty"`
+	Stream      bool   `json:"stream"`
+	RequestType *int16 `json:"request_type,omitempty"`
+
+	UserID      *int64 `json:"user_id,omitempty"`
+	UserEmail   string `json:"user_email,omitempty"`
+	APIKeyID    *int64 `json:"api_key_id,omitempty"`
+	AccountID   *int64 `json:"account_id,omitempty"`
+	AccountName string `json:"account_name,omitempty"`
+	GroupID     *int64 `json:"group_id,omitempty"`
+	GroupName   string `json:"group_name,omitempty"`
+
+	UserAgent string `json:"user_agent,omitempty"`
+
+	InboundEndpoint  string `json:"inbound_endpoint,omitempty"`
+	UpstreamEndpoint string `json:"upstream_endpoint,omitempty"`
+
+	RequestBody          string `json:"request_body"`
+	RequestBodyTruncated bool   `json:"request_body_truncated"`
+	RequestBodyBytes     *int   `json:"request_body_bytes,omitempty"`
+
+	ResponseBody          string `json:"response_body"`
+	ResponseBodyTruncated bool   `json:"response_body_truncated"`
+	ResponseBodyBytes     *int   `json:"response_body_bytes,omitempty"`
+
+	InputTokens         int     `json:"input_tokens"`
+	OutputTokens        int     `json:"output_tokens"`
+	CacheCreationTokens int     `json:"cache_creation_tokens"`
+	CacheReadTokens     int     `json:"cache_read_tokens"`
+	TotalCost           float64 `json:"total_cost"`
+	ActualCost          float64 `json:"actual_cost"`
 }
 
 type OpsRequestDetailFilter struct {
@@ -148,4 +196,21 @@ func (s *OpsService) ListRequestDetails(ctx context.Context, filter *OpsRequestD
 		Page:     page,
 		PageSize: pageSize,
 	}, nil
+}
+
+func (s *OpsService) GetSuccessRequestDetail(ctx context.Context, id int64) (*OpsSuccessRequestDetail, error) {
+	if err := s.RequireMonitoringEnabled(ctx); err != nil {
+		return nil, err
+	}
+	if s.opsRepo == nil {
+		return nil, ErrOpsDisabled
+	}
+	out, err := s.opsRepo.GetSuccessRequestDetail(ctx, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, infraerrors.NotFound("OPS_SUCCESS_REQUEST_NOT_FOUND", "Success request not found")
+		}
+		return nil, err
+	}
+	return out, nil
 }

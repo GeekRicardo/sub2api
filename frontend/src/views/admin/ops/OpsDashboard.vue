@@ -130,6 +130,13 @@
           :platform="platform"
           :group-id="groupId"
           @openErrorDetail="openError"
+          @openRequestTrace="openRequestTrace"
+        />
+
+        <OpsRequestTraceModal
+          :show="showRequestTrace"
+          :row="selectedRequestRow"
+          @update:show="showRequestTrace = $event"
         />
       </template>
     </div>
@@ -169,6 +176,8 @@ import OpsSystemLogTable from './components/OpsSystemLogTable.vue'
 import OpsRequestDetailsModal, { type OpsRequestDetailsPreset } from './components/OpsRequestDetailsModal.vue'
 import OpsSettingsDialog from './components/OpsSettingsDialog.vue'
 import OpsAlertRulesCard from './components/OpsAlertRulesCard.vue'
+import OpsRequestTraceModal from './components/OpsRequestTraceModal.vue'
+import type { OpsRequestDetail } from '@/api/admin/ops'
 
 const route = useRoute()
 const router = useRouter()
@@ -371,6 +380,8 @@ const showErrorDetails = ref(false)
 const errorDetailsType = ref<'request' | 'upstream'>('request')
 
 const showRequestDetails = ref(false)
+const showRequestTrace = ref(false)
+const selectedRequestRow = ref<OpsRequestDetail | null>(null)
 const requestDetailsPreset = ref<OpsRequestDetailsPreset>({
   title: '',
   kind: 'all',
@@ -451,6 +462,7 @@ function handleOpenRequestDetails(preset?: OpsRequestDetailsPreset) {
   // Ensure only one modal visible at a time.
   showErrorDetails.value = false
   showErrorModal.value = false
+  showRequestTrace.value = false
   showRequestDetails.value = true
 }
 
@@ -459,6 +471,7 @@ function openErrorDetails(kind: 'request' | 'upstream') {
   // Ensure only one modal visible at a time.
   showRequestDetails.value = false
   showErrorModal.value = false
+  showRequestTrace.value = false
   showErrorDetails.value = true
 }
 
@@ -509,7 +522,16 @@ function openError(id: number) {
   // Ensure only one modal visible at a time.
   showErrorDetails.value = false
   showRequestDetails.value = false
+  showRequestTrace.value = false
   showErrorModal.value = true
+}
+
+function openRequestTrace(row: OpsRequestDetail) {
+  selectedRequestRow.value = row
+  showErrorDetails.value = false
+  showErrorModal.value = false
+  showRequestDetails.value = false
+  showRequestTrace.value = true
 }
 
 function buildApiParams() {

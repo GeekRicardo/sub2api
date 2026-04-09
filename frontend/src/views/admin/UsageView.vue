@@ -109,6 +109,7 @@
         :default-sort-order="'desc'"
         @sort="handleSort"
         @userClick="handleUserClick"
+        @rowClick="openUsageDetail"
       />
       <Pagination v-if="pagination.total > 0" :page="pagination.page" :total="pagination.total" :page-size="pagination.page_size" @update:page="handlePageChange" @update:pageSize="handlePageSizeChange" />
     </div>
@@ -128,6 +129,11 @@
     :hide-actions="true"
     @close="showBalanceHistoryModal = false; balanceHistoryUser = null"
   />
+  <UsageRecordDetailModal
+    :show="showUsageDetailModal"
+    :row="selectedUsageLog"
+    @update:show="showUsageDetailModal = $event"
+  />
 </template>
 
 <script setup lang="ts">
@@ -143,6 +149,7 @@ import AppLayout from '@/components/layout/AppLayout.vue'; import Pagination fro
 import UsageStatsCards from '@/components/admin/usage/UsageStatsCards.vue'; import UsageFilters from '@/components/admin/usage/UsageFilters.vue'
 import UsageTable from '@/components/admin/usage/UsageTable.vue'; import UsageExportProgress from '@/components/admin/usage/UsageExportProgress.vue'
 import UsageCleanupDialog from '@/components/admin/usage/UsageCleanupDialog.vue'
+import UsageRecordDetailModal from '@/components/admin/usage/UsageRecordDetailModal.vue'
 import UserBalanceHistoryModal from '@/components/admin/user/UserBalanceHistoryModal.vue'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'; import GroupDistributionChart from '@/components/charts/GroupDistributionChart.vue'; import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
 import EndpointDistributionChart from '@/components/charts/EndpointDistributionChart.vue'
@@ -180,6 +187,8 @@ const cleanupDialogVisible = ref(false)
 // Balance history modal state
 const showBalanceHistoryModal = ref(false)
 const balanceHistoryUser = ref<AdminUser | null>(null)
+const showUsageDetailModal = ref(false)
+const selectedUsageLog = ref<AdminUsageLog | null>(null)
 
 const breakdownFilters = computed(() => {
   const f: Record<string, any> = {}
@@ -200,6 +209,11 @@ const handleUserClick = async (userId: number) => {
   } catch {
     appStore.showError(t('admin.usage.failedToLoadUser'))
   }
+}
+
+const openUsageDetail = (row: AdminUsageLog) => {
+  selectedUsageLog.value = row
+  showUsageDetailModal.value = true
 }
 
 const granularityOptions = computed(() => [{ value: 'day', label: t('admin.dashboard.day') }, { value: 'hour', label: t('admin.dashboard.hour') }])

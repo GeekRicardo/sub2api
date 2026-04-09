@@ -706,6 +706,33 @@ func (h *OpsHandler) ListRequestDetails(c *gin.Context) {
 	response.Paginated(c, out.Items, out.Total, out.Page, out.PageSize)
 }
 
+// GetSuccessRequestDetail returns a successful request detail captured from usage_logs.
+// GET /api/v1/admin/ops/requests/success/:id
+func (h *OpsHandler) GetSuccessRequestDetail(c *gin.Context) {
+	if h.opsService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
+		return
+	}
+	if err := h.opsService.RequireMonitoringEnabled(c.Request.Context()); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	idStr := strings.TrimSpace(c.Param("id"))
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id <= 0 {
+		response.BadRequest(c, "Invalid request id")
+		return
+	}
+
+	out, err := h.opsService.GetSuccessRequestDetail(c.Request.Context(), id)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, out)
+}
+
 type opsRetryRequest struct {
 	Mode            string `json:"mode"`
 	PinnedAccountID *int64 `json:"pinned_account_id"`
