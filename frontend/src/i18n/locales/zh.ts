@@ -361,6 +361,7 @@ export default {
     proxies: 'IP管理',
     redeemCodes: '兑换码',
     ops: '运维监控',
+    requestDetails: '请求详情',
     promoCodes: '优惠码',
     settings: '系统设置',
     myAccount: '我的账户',
@@ -4436,6 +4437,28 @@ export default {
           failed: '失败',
           canceled: '已取消'
         }
+      }
+    },
+
+    requestDetails: {
+      title: '请求详情',
+      description: '参考 Langfuse 风格，以请求为中心查看入参与返回和计费明细',
+      listTitle: '请求流',
+      empty: '当前筛选条件下暂无请求记录',
+      selectHint: '从左侧选择一条请求查看详情',
+      allTypes: '全部类型',
+      requestCountSuffix: '条请求',
+      modelPlaceholder: '按模型筛选',
+      failedToLoad: '加载请求详情失败',
+      stats: {
+        requests: '请求数',
+        requestsHint: '当前筛选时间范围内的请求总数',
+        tokens: '总 Tokens',
+        tokensHint: '输入、输出与缓存 Token 汇总',
+        cost: '用户计费',
+        costHint: '按用户账单口径汇总',
+        duration: '平均耗时',
+        durationHint: '请求级平均耗时'
       }
     },
 

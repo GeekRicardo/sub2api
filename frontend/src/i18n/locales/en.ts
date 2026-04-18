@@ -361,6 +361,7 @@ export default {
     proxies: 'Proxies',
     redeemCodes: 'Redeem Codes',
     ops: 'Ops',
+    requestDetails: 'Request Details',
     promoCodes: 'Promo Codes',
     settings: 'Settings',
     myAccount: 'My Account',
@@ -4280,6 +4281,28 @@ export default {
           failed: 'Failed',
           canceled: 'Canceled'
         }
+      }
+    },
+
+    requestDetails: {
+      title: 'Request Details',
+      description: 'A Langfuse-inspired request explorer for browsing prompts, responses and billing details',
+      listTitle: 'Requests',
+      empty: 'No requests found for the current filters',
+      selectHint: 'Select a request from the left panel to inspect its full details',
+      allTypes: 'All Types',
+      requestCountSuffix: 'requests',
+      modelPlaceholder: 'Filter by model',
+      failedToLoad: 'Failed to load request details',
+      stats: {
+        requests: 'Requests',
+        requestsHint: 'Total requests in the selected window',
+        tokens: 'Total Tokens',
+        tokensHint: 'Input, output and cache tokens combined',
+        cost: 'User Cost',
+        costHint: 'Summed at the user billing layer',
+        duration: 'Avg Duration',
+        durationHint: 'Average duration per request'
       }
     },
 
