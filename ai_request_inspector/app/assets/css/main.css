@@ -1,0 +1,76 @@
+@import 'tailwindcss';
+@import '@nuxt/ui';
+
+/* Custom scrollbar for dark theme */
+:root {
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--ui-color-neutral-700);
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--ui-color-neutral-600);
+}
+
+/* JSON Syntax Highlighting */
+.json-key {
+  color: #7dd3fc;
+}
+
+.json-string {
+  color: #86efac;
+}
+
+.json-number {
+  color: #fde68a;
+}
+
+.json-boolean {
+  color: #c4b5fd;
+}
+
+.json-null {
+  color: #f87171;
+}
+
+.json-bracket {
+  color: #94a3b8;
+}
+
+/* Highlight for search matches */
+.search-highlight {
+  background-color: #facc15;
+  color: #000;
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+/* Streaming animation */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+.streaming-dot {
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+.streaming-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.streaming-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
