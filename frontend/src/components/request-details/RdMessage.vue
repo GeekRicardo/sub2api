@@ -19,8 +19,8 @@ interface Props {
   roleLabel?: string
   /** 顶部 id 文本（如 tool_use_id） */
   headerId?: string
-  /** 默认 parsed/json */
-  defaultView?: 'parsed' | 'json'
+  /** 默认 markdown/text/json */
+  defaultView?: 'markdown' | 'text' | 'json'
   /** 默认是否折叠 */
   defaultCollapsed?: boolean
 }
@@ -29,14 +29,25 @@ const props = withDefaults(defineProps<Props>(), {
   index: 0,
   roleLabel: '',
   headerId: '',
-  defaultView: 'parsed',
+  defaultView: 'markdown',
   defaultCollapsed: false
 })
 
-const view = ref<'parsed' | 'json'>(props.defaultView)
+const view = ref<'markdown' | 'text' | 'json'>(props.defaultView)
 const collapsed = ref(props.defaultCollapsed)
 
-const role = computed(() => props.roleLabel || props.message.role || 'unknown')
+// 角色显示规则：
+//   Claude Messages 协议里 tool_result 一律包在 role:"user" 消息里，对用户来说它是"工具
+//   回传"而非真正的用户输入。当消息 content 只含 tool_result 时，外层展示为 "tool" 更准确。
+const role = computed(() => {
+  if (props.roleLabel) return props.roleLabel
+  const original = props.message.role || 'unknown'
+  const c = props.message.content
+  if (Array.isArray(c) && c.length > 0 && c.every((i: any) => i?.type === 'tool_result')) {
+    return 'tool'
+  }
+  return original
+})
 
 const textContent = computed(() => {
   const c = props.message.content
@@ -101,12 +112,39 @@ const preview = computed(() => {
   const first = textContent.value.split('\n')[0] || ''
   return first.slice(0, 120)
 })
+
+const msgEl = ref<HTMLElement | null>(null)
+
+// 点击 header 折叠/展开：
+// 如果 header 当前是 sticky 粘住状态（即 .rd-msg 的 top 已滚到 scroll 容器顶边之上），
+// 直接折叠会让消息高度骤缩、header 被紧跟的下一条挤出视口。先把滚动位置对齐到
+// 本消息的自然顶部再折叠，就能让折叠后的 header 继续留在视口顶部。
+function toggleCollapsed() {
+  if (!collapsed.value) {
+    const el = msgEl.value
+    if (el) {
+      let scroller: HTMLElement | null = el.parentElement
+      while (scroller && scroller !== document.documentElement) {
+        const oy = getComputedStyle(scroller).overflowY
+        if (oy === 'auto' || oy === 'scroll') break
+        scroller = scroller.parentElement
+      }
+      if (scroller) {
+        const msgRect = el.getBoundingClientRect()
+        const scRect = scroller.getBoundingClientRect()
+        const offset = msgRect.top - scRect.top
+        if (offset < 0) scroller.scrollTop += offset
+      }
+    }
+  }
+  collapsed.value = !collapsed.value
+}
 </script>
 
 <template>
-  <div class="rd-msg" :class="[`rd-msg-${role}`, { 'rd-msg-collapsed': collapsed }]">
-    <div class="rd-msg-header" @click="collapsed = !collapsed">
-      <button class="rd-msg-collapse" @click.stop="collapsed = !collapsed">
+  <div ref="msgEl" class="rd-msg" :class="[`rd-msg-${role}`, { 'rd-msg-collapsed': collapsed }]">
+    <div class="rd-msg-header" @click="toggleCollapsed">
+      <button class="rd-msg-collapse" @click.stop="toggleCollapsed">
         <svg width="10" height="10" viewBox="0 0 16 16" fill="none" class="rd-msg-caret">
           <path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
@@ -117,14 +155,15 @@ const preview = computed(() => {
         {{ preview }}{{ textContent.length > 120 ? '…' : '' }}
       </span>
       <div v-if="hasBody && !collapsed" class="rd-msg-tabs" @click.stop>
-        <button class="rd-msg-tab" :class="{ active: view === 'parsed' }" @click="view = 'parsed'">Parsed</button>
+        <button class="rd-msg-tab" :class="{ active: view === 'markdown' }" @click="view = 'markdown'">Markdown</button>
+        <button class="rd-msg-tab" :class="{ active: view === 'text' }" @click="view = 'text'">Text</button>
         <button class="rd-msg-tab" :class="{ active: view === 'json' }" @click="view = 'json'">JSON</button>
       </div>
     </div>
 
     <div v-if="!collapsed" class="rd-msg-body">
-      <template v-if="hasBody && view === 'parsed'">
-        <RdMarkdown v-if="hasText" :text="textContent" />
+      <template v-if="hasBody && (view === 'markdown' || view === 'text')">
+        <RdMarkdown v-if="hasText" :text="textContent" :plain="view === 'text'" />
         <div v-if="extras.length" class="rd-msg-extras">
           <template v-for="(ex, i) in extras" :key="i">
             <div v-if="ex.kind === 'image'" class="rd-msg-image-ph">[image attachment]</div>
@@ -150,7 +189,8 @@ const preview = computed(() => {
   border: 1px solid rgb(226 232 240);
   border-radius: 6px;
   margin-bottom: 0.625rem;
-  overflow: hidden;
+  /* 不能使用 overflow:hidden — 会让 .rd-msg 成为 sticky 的 scroll ancestor，
+     导致 .rd-msg-header 的 sticky 失效（因为 .rd-msg 自己不滚动） */
 }
 
 :global(.dark) .rd-msg {
@@ -165,7 +205,14 @@ const preview = computed(() => {
   padding: 0.4375rem 0.75rem;
   background: rgb(248 250 252);
   border-bottom: 1px solid rgb(226 232 240);
+  border-top-left-radius: 5px;
+  border-top-right-radius: 5px;
   cursor: pointer;
+  /* 当前消息顶部滚过视口时，header 粘在滚动容器顶部；消息整体滚过后
+     被 .rd-msg（sticky 的 containing block）底边推走，下一条 header 接管顶部 */
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 
 .rd-msg-collapsed .rd-msg-header {
@@ -316,7 +363,9 @@ const preview = computed(() => {
   padding: 0.5rem 0.75rem;
 }
 
+/* 不再限制 rd-json-viewer 的外部高度——由内部 .rd-json-tree 的
+   max-height + overflow-y:auto 自己管理滚动，避免内部滚动区被外层裁剪 */
 .rd-msg-json-wrap :deep(.rd-json-viewer) {
-  max-height: 480px;
+  max-height: none;
 }
 </style>

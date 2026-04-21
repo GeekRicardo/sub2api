@@ -798,8 +798,8 @@ function rowStatus(r: AdminUsageLog): 'success' | 'error' | 'processing' {
 
 .rd-modal-container {
   position: relative;
-  width: min(1440px, 96vw);
-  height: min(92vh, 100%);
+  width: min(1760px, 98vw);
+  height: min(94vh, 100%);
   display: flex;
   flex-direction: column;
 }

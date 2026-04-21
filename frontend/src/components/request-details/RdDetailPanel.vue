@@ -38,7 +38,34 @@ const responseBody = computed(() => parseJsonSafe(props.detail?.response_body))
 
 const messages = computed<any[]>(() => {
   const rb: any = requestBody.value
-  return Array.isArray(rb?.messages) ? rb.messages : []
+  const list = Array.isArray(rb?.messages) ? [...rb.messages] : []
+  // Claude/Anthropic 风格：system 是请求体独立字段（string 或 content blocks）。
+  // OpenAI 风格：system 已作为 messages[0] 存在，不需要再注入。
+  const sys = rb?.system
+  const hasSystemInList = list.some((m: any) => m?.role === 'system')
+  if (sys != null && !hasSystemInList) {
+    const isEmpty =
+      (typeof sys === 'string' && !sys.trim()) ||
+      (Array.isArray(sys) && sys.length === 0)
+    if (!isEmpty) list.unshift({ role: 'system', content: sys })
+  }
+  return list
+})
+
+const lastAssistantIndex = computed(() => {
+  const list = messages.value
+  for (let i = list.length - 1; i >= 0; i--) {
+    if (list[i]?.role === 'assistant') return i
+  }
+  return -1
+})
+
+const lastUserIndex = computed(() => {
+  const list = messages.value
+  for (let i = list.length - 1; i >= 0; i--) {
+    if (list[i]?.role === 'user') return i
+  }
+  return -1
 })
 
 const streamChunks = computed<any[]>(() => {
@@ -166,6 +193,16 @@ async function scrollIntoPosition() {
   const el = contentEl.value
   if (!el) return
   if (section.value === 'messages') {
+    // 定位到最后一条 user message，紧跟其后的最新 assistant 留在视口内
+    const idx = lastUserIndex.value
+    if (idx >= 0) {
+      const target = el.querySelector<HTMLElement>(`.rd-msg-wrap[data-idx="${idx}"]`)
+      if (target) {
+        const top = target.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop
+        el.scrollTop = Math.max(0, top - 8)
+        return
+      }
+    }
     el.scrollTop = el.scrollHeight
   } else {
     el.scrollTop = 0
@@ -205,6 +242,143 @@ function scrollToTop() {
 function scrollToBottom() {
   if (contentEl.value) contentEl.value.scrollTo({ top: contentEl.value.scrollHeight, behavior: 'smooth' })
 }
+
+// ------- 面板内文本搜索（Cmd/Ctrl-F 之外的轻量内联搜索） -------
+const searchQuery = ref('')
+const searchIgnoreCase = ref(true)
+const searchRegex = ref(false)
+const searchRanges = ref<Range[]>([])
+const searchCurrentIdx = ref(-1)
+const searchError = ref(false)
+
+// CSS Custom Highlights API：不破坏 DOM，直接为 Range 集合上色
+const hasHighlightApi = typeof window !== 'undefined' && 'highlights' in CSS
+
+function clearHighlights() {
+  if (!hasHighlightApi) return
+  const h = (CSS as any).highlights
+  h.delete('rd-search')
+  h.delete('rd-search-current')
+}
+
+function buildRegex(): RegExp | null {
+  const q = searchQuery.value
+  if (!q) return null
+  const flags = searchIgnoreCase.value ? 'gi' : 'g'
+  try {
+    const source = searchRegex.value
+      ? q
+      : q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return new RegExp(source, flags)
+  } catch {
+    return null
+  }
+}
+
+async function performSearch(keepIdx = false) {
+  // DOM 结构可能刚刚变化（tab 切换 / 首次渲染），等一帧再扫
+  await nextTick()
+  clearHighlights()
+  searchError.value = false
+  const container = contentEl.value
+  const regex = buildRegex()
+  if (!container || !regex) {
+    searchRanges.value = []
+    searchCurrentIdx.value = -1
+    if (searchQuery.value && !regex) searchError.value = true
+    return
+  }
+  const ranges: Range[] = []
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      // 跳过不可见节点（例如 display:none 的面板、script/style）
+      const parent = node.parentElement
+      if (!parent) return NodeFilter.FILTER_REJECT
+      const tag = parent.tagName
+      if (tag === 'SCRIPT' || tag === 'STYLE') return NodeFilter.FILTER_REJECT
+      if (!(parent.offsetParent || parent === container)) return NodeFilter.FILTER_REJECT
+      return NodeFilter.FILTER_ACCEPT
+    }
+  })
+  let node: Node | null
+  while ((node = walker.nextNode())) {
+    const text = node.nodeValue || ''
+    if (!text) continue
+    regex.lastIndex = 0
+    let m: RegExpExecArray | null
+    while ((m = regex.exec(text))) {
+      if (m[0].length === 0) { regex.lastIndex++; continue }
+      try {
+        const r = document.createRange()
+        r.setStart(node, m.index)
+        r.setEnd(node, m.index + m[0].length)
+        ranges.push(r)
+      } catch { /* 忽略无效 range */ }
+    }
+  }
+  searchRanges.value = ranges
+  if (hasHighlightApi && ranges.length > 0) {
+    ;(CSS as any).highlights.set('rd-search', new (window as any).Highlight(...ranges))
+  }
+  if (ranges.length === 0) {
+    searchCurrentIdx.value = -1
+    return
+  }
+  const nextIdx = keepIdx && searchCurrentIdx.value >= 0
+    ? Math.min(searchCurrentIdx.value, ranges.length - 1)
+    : 0
+  jumpToRange(nextIdx)
+}
+
+function jumpToRange(idx: number) {
+  const range = searchRanges.value[idx]
+  if (!range) return
+  searchCurrentIdx.value = idx
+  if (hasHighlightApi) {
+    ;(CSS as any).highlights.set('rd-search-current', new (window as any).Highlight(range))
+  }
+  const container = contentEl.value
+  if (!container) return
+  const rect = range.getBoundingClientRect()
+  const cRect = container.getBoundingClientRect()
+  const delta = rect.top - cRect.top
+  // 目标附近留 80px 顶部空间，尽量让命中点落在视口 1/3 处
+  const target = container.scrollTop + delta - Math.max(80, container.clientHeight / 3)
+  container.scrollTo({ top: Math.max(0, target), behavior: 'smooth' })
+}
+
+function searchNext() {
+  const n = searchRanges.value.length
+  if (n === 0) return
+  jumpToRange((searchCurrentIdx.value + 1) % n)
+}
+function searchPrev() {
+  const n = searchRanges.value.length
+  if (n === 0) return
+  jumpToRange((searchCurrentIdx.value - 1 + n) % n)
+}
+function searchClear() {
+  searchQuery.value = ''
+  searchRanges.value = []
+  searchCurrentIdx.value = -1
+  searchError.value = false
+  clearHighlights()
+}
+function onSearchKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    if (searchRanges.value.length === 0) { performSearch(); return }
+    e.shiftKey ? searchPrev() : searchNext()
+  } else if (e.key === 'Escape') {
+    e.preventDefault()
+    searchClear()
+  }
+}
+
+// 查询变化 / 开关切换时重跑；切 section 后 DOM 变化也要刷新
+watch([searchQuery, searchIgnoreCase, searchRegex], () => { performSearch() })
+watch(section, () => { if (searchQuery.value) performSearch(true) }, { flush: 'post' })
+watch(() => props.detail?.id, () => { searchClear() })
 
 const streamView = ref<'text' | 'json'>('text')
 const accumulatedText = computed(() => {
@@ -273,6 +447,66 @@ const accumulatedText = computed(() => {
             </svg>
           </button>
         </span>
+
+        <div class="rd-search" :class="{ 'rd-search-error': searchError }">
+          <svg class="rd-search-icon" width="13" height="13" viewBox="0 0 16 16" fill="none">
+            <circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.5" />
+            <path d="M11 11l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+          <input
+            v-model="searchQuery"
+            type="text"
+            class="rd-search-input"
+            :placeholder="searchRegex ? '正则搜索…' : '搜索文本…'"
+            spellcheck="false"
+            @keydown="onSearchKeydown"
+          />
+          <span v-if="searchQuery" class="rd-search-count">
+            {{ searchRanges.length === 0 ? '0 / 0' : `${searchCurrentIdx + 1} / ${searchRanges.length}` }}
+          </span>
+          <button
+            class="rd-search-btn rd-search-toggle"
+            :class="{ active: !searchIgnoreCase }"
+            title="区分大小写"
+            @click="searchIgnoreCase = !searchIgnoreCase"
+          >Aa</button>
+          <button
+            class="rd-search-btn rd-search-toggle"
+            :class="{ active: searchRegex }"
+            title="正则匹配"
+            @click="searchRegex = !searchRegex"
+          >.*</button>
+          <button
+            class="rd-search-btn"
+            title="上一个 (Shift+Enter)"
+            :disabled="searchRanges.length === 0"
+            @click="searchPrev"
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+              <path d="M4 10l4-4 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+          <button
+            class="rd-search-btn"
+            title="下一个 (Enter)"
+            :disabled="searchRanges.length === 0"
+            @click="searchNext"
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+              <path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+          <button
+            v-if="searchQuery"
+            class="rd-search-btn"
+            title="清空 (Esc)"
+            @click="searchClear"
+          >
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
+              <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       <div class="rd-detail-body">
@@ -333,25 +567,16 @@ const accumulatedText = computed(() => {
 
           <!-- MESSAGES: 完整对话 -->
           <template v-else-if="section === 'messages'">
-            <div class="rd-section-header">
-              <h3 class="rd-section-title">
-                Messages <span class="rd-section-badge">{{ messages.length }}</span>
-              </h3>
-              <div class="rd-scroll-controls">
-                <button class="rd-scroll-btn" title="滚动到顶部" @click="scrollToTop">
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                    <path d="M8 3L3 8h3v5h4V8h3L8 3z" fill="currentColor" />
-                  </svg>
-                </button>
-                <button class="rd-scroll-btn" title="滚动到底部" @click="scrollToBottom">
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                    <path d="M8 13l5-5h-3V3H6v5H3l5 5z" fill="currentColor" />
-                  </svg>
-                </button>
-              </div>
-            </div>
             <div class="rd-messages">
-              <RdMessage v-for="(m, i) in messages" :key="i" :message="m" :index="i" />
+              <div
+                v-for="(m, i) in messages"
+                :key="i"
+                class="rd-msg-wrap"
+                :class="{ 'rd-msg-highlight': i === lastAssistantIndex }"
+                :data-idx="i"
+              >
+                <RdMessage :message="m" :index="i" />
+              </div>
             </div>
           </template>
 
@@ -432,6 +657,20 @@ const accumulatedText = computed(() => {
             </div>
           </template>
         </main>
+
+        <!-- 滚动按钮浮层：绝对定位到 body 右上角，不和 sticky header 争位置 -->
+        <div v-if="section === 'messages'" class="rd-scroll-fab" aria-hidden="false">
+          <button class="rd-scroll-btn" title="滚动到顶部" @click="scrollToTop">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+              <path d="M8 3L3 8h3v5h4V8h3L8 3z" fill="currentColor" />
+            </svg>
+          </button>
+          <button class="rd-scroll-btn" title="滚动到底部" @click="scrollToBottom">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+              <path d="M8 13l5-5h-3V3H6v5H3l5 5z" fill="currentColor" />
+            </svg>
+          </button>
+        </div>
       </div>
     </template>
   </div>
@@ -556,6 +795,126 @@ const accumulatedText = computed(() => {
   flex-shrink: 0;
 }
 
+/* 把搜索框推到右侧，窄屏下 flex-wrap 会让它自动换行 */
+.rd-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
+  padding: 0.1875rem 0.3125rem 0.1875rem 0.5rem;
+  background: rgb(248 250 252);
+  border: 1px solid rgb(226 232 240);
+  border-radius: 6px;
+  transition: border-color 0.15s, background 0.15s;
+  min-width: 280px;
+}
+
+.rd-search:focus-within {
+  border-color: rgb(94 234 212);
+  background: white;
+  box-shadow: 0 0 0 3px rgb(94 234 212 / 0.2);
+}
+
+.rd-search.rd-search-error {
+  border-color: rgb(248 113 113);
+  box-shadow: 0 0 0 3px rgb(248 113 113 / 0.18);
+}
+
+:global(.dark) .rd-search {
+  background: rgb(15 23 42);
+  border-color: rgb(51 65 85);
+}
+
+:global(.dark) .rd-search:focus-within {
+  background: rgb(30 41 59);
+  border-color: rgb(13 148 136);
+}
+
+.rd-search-icon {
+  color: rgb(148 163 184);
+  flex-shrink: 0;
+}
+
+.rd-search-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.1875rem 0.25rem;
+  font-size: 0.8125rem;
+  color: rgb(15 23 42);
+  background: transparent;
+  border: none;
+  outline: none;
+}
+
+:global(.dark) .rd-search-input {
+  color: rgb(241 245 249);
+}
+
+.rd-search-input::placeholder {
+  color: rgb(148 163 184);
+}
+
+.rd-search-count {
+  font-size: 0.6875rem;
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  color: rgb(100 116 139);
+  padding: 0 0.25rem;
+  white-space: nowrap;
+}
+
+.rd-search-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 0.3125rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: rgb(100 116 139);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.rd-search-btn:hover:not(:disabled) {
+  background: rgb(226 232 240);
+  color: rgb(15 23 42);
+}
+
+:global(.dark) .rd-search-btn:hover:not(:disabled) {
+  background: rgb(51 65 85);
+  color: rgb(241 245 249);
+}
+
+.rd-search-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.rd-search-toggle.active {
+  background: rgb(20 184 166);
+  color: white;
+}
+
+.rd-search-toggle.active:hover {
+  background: rgb(13 148 136);
+  color: white;
+}
+
+/* CSS Custom Highlights 需要全局选择器，scoped 无法限定到组件内 */
+:global(::highlight(rd-search)) {
+  background-color: rgb(250 204 21 / 0.45);
+  color: inherit;
+}
+
+:global(::highlight(rd-search-current)) {
+  background-color: rgb(251 146 60);
+  color: white;
+}
+
 :global(.dark) .rd-detail-meta {
   border-bottom-color: rgb(51 65 85);
 }
@@ -632,6 +991,7 @@ const accumulatedText = computed(() => {
 }
 
 .rd-detail-body {
+  position: relative;  /* 作为 .rd-scroll-fab 绝对定位的参照 */
   display: flex;
   flex: 1;
   overflow: hidden;
@@ -712,10 +1072,13 @@ const accumulatedText = computed(() => {
 .rd-content {
   flex: 1;
   overflow-y: auto;
-  padding: 1rem 1.25rem;
+  /* 去掉 padding-top：让 Messages 的 sticky header 能真正贴到滚动容器顶边，
+     非 messages section 的 section-header 通过自身 margin-top 补上呼吸空间 */
+  padding: 0 1.25rem 1rem 1.25rem;
 }
 
 .rd-section-header {
+  margin-top: 1rem;  /* 补回各 section 顶部留白（messages 自己不用 section-header） */
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -741,6 +1104,29 @@ const accumulatedText = computed(() => {
 .rd-scroll-controls {
   display: inline-flex;
   gap: 0.25rem;
+}
+
+/* Messages 标签下的滚动按钮浮层：绝对定位到 .rd-detail-body 右上角，
+   不随滚动容器滚动，不占 .rd-content 流空间，不与 sticky message header 争位置 */
+.rd-scroll-fab {
+  position: absolute;
+  top: 50px;
+  right: 50px;
+  display: flex;
+  gap: 0.375rem;
+  z-index: 30;
+}
+
+.rd-scroll-fab > .rd-scroll-btn {
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.12);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+:global(.dark) .rd-scroll-fab > .rd-scroll-btn {
+  background: rgba(30, 41, 59, 0.92);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
 }
 
 .rd-scroll-btn {
@@ -882,6 +1268,26 @@ const accumulatedText = computed(() => {
 .rd-messages {
   display: flex;
   flex-direction: column;
+}
+
+/* 最新一条 assistant 稍微高亮，让视线在 Messages tab 自动落位到对话尾部 */
+.rd-msg-wrap.rd-msg-highlight :deep(.rd-msg) {
+  border-color: rgb(16 185 129 / 0.55);
+  box-shadow: 0 0 0 2px rgb(16 185 129 / 0.12);
+  background: rgb(240 253 250);
+}
+
+:global(.dark) .rd-msg-wrap.rd-msg-highlight :deep(.rd-msg) {
+  border-color: rgb(16 185 129 / 0.55);
+  background: rgb(6 78 59 / 0.35);
+}
+
+.rd-msg-wrap.rd-msg-highlight :deep(.rd-msg-header) {
+  background: rgb(209 250 229);
+}
+
+:global(.dark) .rd-msg-wrap.rd-msg-highlight :deep(.rd-msg-header) {
+  background: rgb(6 78 59 / 0.55);
 }
 
 .rd-stream-text {
