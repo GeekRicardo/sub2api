@@ -3,11 +3,13 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
+import Pagination from '@/components/common/Pagination.vue'
 import RdDetailPanel from '@/components/request-details/RdDetailPanel.vue'
 import { adminUsageAPI, type AdminUsageLogDetail, type AdminUsageStatsResponse } from '@/api/admin/usage'
 import type { AdminUsageLog, UsageRequestType } from '@/types'
 import { useAppStore } from '@/stores'
 import { useI18n } from 'vue-i18n'
+import { DEFAULT_TABLE_PAGE_SIZE, normalizeTablePageSize } from '@/utils/tablePreferences'
 
 const appStore = useAppStore()
 const router = useRouter()
@@ -40,6 +42,16 @@ const searchQuery = ref((route.query.q as string) || '')
 const selectedRequestId = ref<number | null>(
   route.query.request_id ? Number(route.query.request_id) : null
 )
+
+// ───── 分页状态 ─────
+function parsePageFromQuery(value: unknown): number {
+  const n = Number(value)
+  return Number.isInteger(n) && n > 0 ? n : 1
+}
+
+const page = ref(parsePageFromQuery(route.query.page))
+const pageSize = ref(normalizeTablePageSize(route.query.page_size))
+const total = ref(0)
 
 // ───── 数据 ─────
 const requests = ref<AdminUsageLog[]>([])
@@ -79,6 +91,8 @@ function syncUrl() {
   if (sessionFilter.value) query.session_id = sessionFilter.value
   if (searchQuery.value) query.q = searchQuery.value
   if (selectedRequestId.value) query.request_id = String(selectedRequestId.value)
+  if (page.value > 1) query.page = String(page.value)
+  if (pageSize.value !== DEFAULT_TABLE_PAGE_SIZE) query.page_size = String(pageSize.value)
   router.replace({ query })
 }
 
@@ -89,17 +103,18 @@ async function loadRequests() {
   try {
     const response = await adminUsageAPI.list(
       {
-        page: 1,
-        page_size: 100,
+        page: page.value,
+        page_size: pageSize.value,
         start_date: startDate.value,
         end_date: endDate.value,
         request_type: requestFilter.value === 'all' ? undefined : requestFilter.value,
         model: modelFilter.value || undefined,
-        exact_total: false
+        exact_total: true
       },
       { signal: listAbort.signal }
     )
     requests.value = response.items || []
+    total.value = response.total || 0
     if (selectedRequestId.value) loadDetail()
   } catch (error: any) {
     if (error?.name === 'AbortError' || error?.code === 'ERR_CANCELED') return
@@ -145,13 +160,28 @@ async function refreshAll() {
 function onDateRangeChange(range: { startDate: string; endDate: string }) {
   startDate.value = range.startDate
   endDate.value = range.endDate
+  page.value = 1
   syncUrl()
   refreshAll()
 }
 
 function onFilterChange() {
+  page.value = 1
   syncUrl()
   refreshAll()
+}
+
+function onPageChange(newPage: number) {
+  page.value = newPage
+  syncUrl()
+  loadRequests()
+}
+
+function onPageSizeChange(newSize: number) {
+  pageSize.value = newSize
+  page.value = 1
+  syncUrl()
+  loadRequests()
 }
 
 function onSelectRequest(id: number) {
@@ -188,6 +218,8 @@ function onPopState() {
   modelFilter.value = (route.query.model as string) || ''
   sessionFilter.value = (route.query.session_id as string) || ''
   searchQuery.value = (route.query.q as string) || ''
+  page.value = parsePageFromQuery(route.query.page)
+  pageSize.value = normalizeTablePageSize(route.query.page_size)
   const qid = route.query.request_id ? Number(route.query.request_id) : null
   if (qid !== selectedRequestId.value) {
     selectedRequestId.value = qid
@@ -376,6 +408,17 @@ function rowStatus(r: AdminUsageLog): 'success' | 'error' | 'processing' {
           </tbody>
         </table>
       </div>
+
+      <!-- Pagination -->
+      <Pagination
+        v-if="total > 0"
+        class="rd-pagination"
+        :page="page"
+        :total="total"
+        :page-size="pageSize"
+        @update:page="onPageChange"
+        @update:pageSize="onPageSizeChange"
+      />
 
       <!-- Modal -->
       <Teleport to="body">

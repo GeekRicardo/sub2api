@@ -36,20 +36,102 @@ function parseJsonSafe(raw: unknown): unknown {
 const requestBody = computed(() => parseJsonSafe(props.detail?.request_body))
 const responseBody = computed(() => parseJsonSafe(props.detail?.response_body))
 
+// 把 Responses API 的 content part 归一化为内部统一格式
+// （type: 'text' / 'image' / 'tool_use' / 'tool_result'），
+// 便于 RdMessage 直接识别。
+function normalizeContentPart(part: any): any {
+  if (!part || typeof part !== 'object') return part
+  switch (part.type) {
+    case 'input_text':
+    case 'output_text':
+      return { type: 'text', text: typeof part.text === 'string' ? part.text : '' }
+    case 'refusal':
+      return { type: 'text', text: typeof part.refusal === 'string' ? part.refusal : '' }
+    case 'input_image':
+    case 'output_image':
+      return { type: 'image' }
+    default:
+      return part
+  }
+}
+
+// OpenAI Responses API（Codex 使用的格式）：
+// { instructions, input: [{ type: 'message' | 'function_call' | 'function_call_output' | 'reasoning', ... }] }
+function normalizeResponsesApi(rb: any): any[] {
+  const out: any[] = []
+  const instr = rb.instructions
+  if (typeof instr === 'string' && instr.trim()) {
+    out.push({ role: 'system', content: instr })
+  } else if (Array.isArray(instr) && instr.length > 0) {
+    out.push({ role: 'system', content: instr.map(normalizeContentPart) })
+  }
+
+  for (const item of rb.input as any[]) {
+    if (!item || typeof item !== 'object') continue
+    const itemType = item.type ?? 'message'
+    if (itemType === 'message') {
+      const content = Array.isArray(item.content)
+        ? item.content.map(normalizeContentPart)
+        : item.content
+      out.push({ role: item.role || 'user', content })
+    } else if (itemType === 'function_call') {
+      let args: any = item.arguments
+      if (typeof args === 'string') {
+        try { args = JSON.parse(args) } catch { /* keep raw string */ }
+      }
+      out.push({
+        role: 'assistant',
+        content: [{ type: 'tool_use', id: item.call_id || item.id, name: item.name, input: args }]
+      })
+    } else if (itemType === 'function_call_output') {
+      let data: any = item.output
+      if (typeof data === 'string') {
+        try { data = JSON.parse(data) } catch { /* keep raw string */ }
+      }
+      out.push({
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: item.call_id || item.id, content: data }]
+      })
+    } else if (itemType === 'reasoning') {
+      const summary = Array.isArray(item.summary) ? item.summary : []
+      const text = summary
+        .map((s: any) => (s?.text ?? '').toString())
+        .filter(Boolean)
+        .join('\n\n')
+      if (text) out.push({ role: 'assistant', content: [{ type: 'text', text }] })
+    } else {
+      out.push({ role: item.role || itemType, content: item })
+    }
+  }
+  return out
+}
+
 const messages = computed<any[]>(() => {
   const rb: any = requestBody.value
-  const list = Array.isArray(rb?.messages) ? [...rb.messages] : []
-  // Claude/Anthropic 风格：system 是请求体独立字段（string 或 content blocks）。
-  // OpenAI 风格：system 已作为 messages[0] 存在，不需要再注入。
-  const sys = rb?.system
-  const hasSystemInList = list.some((m: any) => m?.role === 'system')
-  if (sys != null && !hasSystemInList) {
-    const isEmpty =
-      (typeof sys === 'string' && !sys.trim()) ||
-      (Array.isArray(sys) && sys.length === 0)
-    if (!isEmpty) list.unshift({ role: 'system', content: sys })
+  if (!rb || typeof rb !== 'object') return []
+
+  // Chat Completions / Anthropic Messages 格式
+  if (Array.isArray(rb.messages)) {
+    const list = [...rb.messages]
+    // Claude/Anthropic 风格：system 是请求体独立字段（string 或 content blocks）。
+    // OpenAI 风格：system 已作为 messages[0] 存在，不需要再注入。
+    const sys = rb.system
+    const hasSystemInList = list.some((m: any) => m?.role === 'system')
+    if (sys != null && !hasSystemInList) {
+      const isEmpty =
+        (typeof sys === 'string' && !sys.trim()) ||
+        (Array.isArray(sys) && sys.length === 0)
+      if (!isEmpty) list.unshift({ role: 'system', content: sys })
+    }
+    return list
   }
-  return list
+
+  // OpenAI Responses API (Codex)
+  if (Array.isArray(rb.input)) {
+    return normalizeResponsesApi(rb)
+  }
+
+  return []
 })
 
 const lastAssistantIndex = computed(() => {

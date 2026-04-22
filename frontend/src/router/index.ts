@@ -649,12 +649,15 @@ const routes: RouteRecordRaw[] = [
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes,
-  scrollBehavior(_to, _from, savedPosition) {
-    // Scroll to saved position when using browser back/forward
+  scrollBehavior(to, from, savedPosition) {
     if (savedPosition) {
       return savedPosition
     }
-    // Scroll to top for new routes
+    // 同一页面仅 query/hash 变化（例如筛选、modal 打开/关闭后 syncUrl）
+    // 不应把列表滚动回顶部
+    if (to.path === from.path) {
+      return false
+    }
     return { top: 0 }
   }
 })

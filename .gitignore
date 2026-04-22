@@ -136,3 +136,7 @@ docs/*
 frontend/coverage/
 aicodex
 output/
+
+.omx/
+.cursor/
+ai_request_inspector/.nuxt/
