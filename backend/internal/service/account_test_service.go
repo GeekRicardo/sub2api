@@ -1451,7 +1451,7 @@ func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Co
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("OpenAI-Beta", "responses=experimental")
 	req.Header.Set("originator", "opencode")
-	if customUA := strings.TrimSpace(account.GetOpenAIUserAgent()); customUA != "" {
+	if customUA := strings.TrimSpace(account.GetOpenAIEffectiveUserAgent()); customUA != "" {
 		req.Header.Set("User-Agent", customUA)
 	} else {
 		req.Header.Set("User-Agent", codexCLIUserAgent)

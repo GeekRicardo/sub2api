@@ -1845,6 +1845,36 @@ func TestOpenAIBuildUpstreamRequestOAuthMessagesBridgeUsesSessionOnly(t *testing
 	require.Empty(t, req.Header.Get("originator"))
 }
 
+func TestOpenAIBuildUpstreamRequestUsesCodexUserAgentFromAccountOption(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader([]byte(`{"model":"gpt-5.3-codex"}`)))
+	c.Request.Header.Set("User-Agent", "curl/8.0")
+
+	svc := &OpenAIGatewayService{cfg: &config.Config{
+		Security: config.SecurityConfig{
+			URLAllowlist: config.URLAllowlistConfig{Enabled: false},
+		},
+	}}
+	account := &Account{
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"api_key":    "sk-test",
+			"base_url":   "https://api.openai.com",
+			"user_agent": "custom-client/1.0",
+		},
+		Extra: map[string]any{
+			"openai_use_codex_user_agent": true,
+		},
+	}
+
+	req, err := svc.buildUpstreamRequest(c.Request.Context(), c, account, []byte(`{"model":"gpt-5.3-codex"}`), "sk-test", false, "", false)
+	require.NoError(t, err)
+	require.Equal(t, codexCLIUserAgent, req.Header.Get("User-Agent"))
+}
+
 func TestOpenAIBuildUpstreamRequestPreservesCompactPathForAPIKeyBaseURL(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	rec := httptest.NewRecorder()

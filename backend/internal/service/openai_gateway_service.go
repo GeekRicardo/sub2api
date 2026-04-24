@@ -3193,10 +3193,10 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		}
 	}
 
-	// 透传模式也支持账户自定义 User-Agent 与 ForceCodexCLI 兜底。
-	customUA := account.GetOpenAIUserAgent()
-	if customUA != "" {
-		req.Header.Set("user-agent", customUA)
+	// 透传模式也支持账户级 User-Agent 覆盖与 ForceCodexCLI 兜底。
+	accountUA := account.GetOpenAIEffectiveUserAgent()
+	if accountUA != "" {
+		req.Header.Set("user-agent", accountUA)
 	}
 	if s.cfg != nil && s.cfg.Gateway.ForceCodexCLI {
 		req.Header.Set("user-agent", codexCLIUserAgent)
@@ -3898,10 +3898,10 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 		}
 	}
 
-	// Apply custom User-Agent if configured
-	customUA := account.GetOpenAIUserAgent()
-	if customUA != "" {
-		req.Header.Set("user-agent", customUA)
+	// Apply account-level User-Agent override if configured.
+	accountUA := account.GetOpenAIEffectiveUserAgent()
+	if accountUA != "" {
+		req.Header.Set("user-agent", accountUA)
 	}
 
 	// 若开启 ForceCodexCLI，则强制将上游 User-Agent 伪装为 Codex CLI。

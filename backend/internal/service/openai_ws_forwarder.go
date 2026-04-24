@@ -1167,7 +1167,7 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 
 	customUA := ""
 	if account != nil {
-		customUA = account.GetOpenAIUserAgent()
+		customUA = account.GetOpenAIEffectiveUserAgent()
 	}
 	if strings.TrimSpace(customUA) != "" {
 		headers.Set("user-agent", customUA)

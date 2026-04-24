@@ -784,7 +784,7 @@ func (s *OpenAIGatewayService) buildOpenAIImagesRequest(
 			req.Header.Add(key, value)
 		}
 	}
-	customUA := account.GetOpenAIUserAgent()
+	customUA := account.GetOpenAIEffectiveUserAgent()
 	if customUA != "" {
 		req.Header.Set("User-Agent", customUA)
 	}

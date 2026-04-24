@@ -1025,6 +1025,27 @@ func (a *Account) GetOpenAIUserAgent() string {
 	return a.GetCredential("user_agent")
 }
 
+// ShouldUseOpenAICodexUserAgent returns whether this OpenAI account should
+// force the upstream User-Agent to the backend's current Codex CLI UA.
+// Field: accounts.extra.openai_use_codex_user_agent.
+func (a *Account) ShouldUseOpenAICodexUserAgent() bool {
+	if a == nil || !a.IsOpenAI() || a.Extra == nil {
+		return false
+	}
+	enabled, ok := a.Extra["openai_use_codex_user_agent"].(bool)
+	return ok && enabled
+}
+
+func (a *Account) GetOpenAIEffectiveUserAgent() string {
+	if a == nil || !a.IsOpenAI() {
+		return ""
+	}
+	if a.ShouldUseOpenAICodexUserAgent() {
+		return codexCLIUserAgent
+	}
+	return a.GetOpenAIUserAgent()
+}
+
 func (a *Account) GetChatGPTAccountID() string {
 	if !a.IsOpenAIOAuth() {
 		return ""

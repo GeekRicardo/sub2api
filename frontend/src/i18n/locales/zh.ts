@@ -3296,6 +3296,9 @@ export default {
         apiKeyResponsesWebsocketsV2Desc:
           '仅对 OpenAI API Key 生效。开启后该账号才允许使用 OpenAI WebSocket Mode 协议。',
         responsesWebsocketsV2PassthroughHint: '当前已开启自动透传：仅影响 HTTP 透传链路，不影响 WS mode。',
+        useCodexUserAgent: '使用 Codex User-Agent',
+        useCodexUserAgentDesc:
+          '开启后，该账号转发到 OpenAI 上游时强制使用后端内置的 Codex CLI User-Agent，适合只接受 Codex 客户端请求的模型。',
         codexCLIOnly: '仅允许 Codex 官方客户端',
         codexCLIOnlyDesc: '仅对 OpenAI OAuth 生效。开启后仅允许 Codex 官方客户端家族访问；关闭后完全绕过并保持原逻辑。',
         codexImageGenerationBridge: 'Codex 图片生成桥接',

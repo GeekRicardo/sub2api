@@ -135,6 +135,52 @@ func TestAccount_IsCodexCLIOnlyEnabled(t *testing.T) {
 	})
 }
 
+func TestAccount_ShouldUseOpenAICodexUserAgent(t *testing.T) {
+	t.Run("OpenAI API Key 开启", func(t *testing.T) {
+		account := &Account{
+			Platform: PlatformOpenAI,
+			Type:     AccountTypeAPIKey,
+			Extra: map[string]any{
+				"openai_use_codex_user_agent": true,
+			},
+		}
+		require.True(t, account.ShouldUseOpenAICodexUserAgent())
+	})
+
+	t.Run("OpenAI OAuth 开启", func(t *testing.T) {
+		account := &Account{
+			Platform: PlatformOpenAI,
+			Type:     AccountTypeOAuth,
+			Extra: map[string]any{
+				"openai_use_codex_user_agent": true,
+			},
+		}
+		require.True(t, account.ShouldUseOpenAICodexUserAgent())
+	})
+
+	t.Run("非 OpenAI 账号忽略", func(t *testing.T) {
+		account := &Account{
+			Platform: PlatformAnthropic,
+			Type:     AccountTypeAPIKey,
+			Extra: map[string]any{
+				"openai_use_codex_user_agent": true,
+			},
+		}
+		require.False(t, account.ShouldUseOpenAICodexUserAgent())
+	})
+
+	t.Run("类型非法默认关闭", func(t *testing.T) {
+		account := &Account{
+			Platform: PlatformOpenAI,
+			Type:     AccountTypeAPIKey,
+			Extra: map[string]any{
+				"openai_use_codex_user_agent": "true",
+			},
+		}
+		require.False(t, account.ShouldUseOpenAICodexUserAgent())
+	})
+}
+
 func TestAccount_IsOpenAIResponsesWebSocketV2Enabled(t *testing.T) {
 	t.Run("OAuth使用OAuth专用开关", func(t *testing.T) {
 		account := &Account{
