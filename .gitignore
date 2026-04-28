@@ -139,4 +139,6 @@ output/
 
 .omx/
 .cursor/
+.windsurf/
 ai_request_inspector/.nuxt/
+.playwright-cli/
